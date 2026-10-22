@@ -76,6 +76,7 @@ describe('OutboxRelayService', () => {
     await expect(relay.runOnce()).resolves.toBe(1);
 
     expect(publisher.publish).toHaveBeenCalledWith(e);
+    // sendWebhook is only called for non-webhook aggregateType events
     expect(outbox.sendWebhook).toHaveBeenCalledWith(null, e.type, e.payload, e.dedupKey);
     expect(dispatcher.dispatch).toHaveBeenCalledWith(e);
     expect(outbox.markDelivered).toHaveBeenCalledWith(e);
@@ -148,5 +149,41 @@ describe('OutboxRelayService', () => {
       resetEnvConfig();
       validateEnv();
     }
+  });
+
+  it('does not spawn a new webhook event when relaying an existing webhook event', async () => {
+    const webhookEvent = event({ id: 'webhook-evt', aggregateType: 'webhook' });
+    outbox.claimDue.mockResolvedValue([webhookEvent]);
+
+    await relay.runOnce();
+
+    expect(publisher.publish).toHaveBeenCalledWith(webhookEvent);
+    expect(outbox.sendWebhook).not.toHaveBeenCalled();
+    expect(dispatcher.dispatch).toHaveBeenCalledWith(webhookEvent);
+    expect(outbox.markDelivered).toHaveBeenCalledWith(webhookEvent);
+  });
+
+  it('prevents perpetual re-spawning: webhook clones are not re-fanned out', async () => {
+    const originalEvent = event({ type: 'escrow.created', aggregateType: 'escrow' });
+    const webhookClone = event({
+      id: 'webhook-clone',
+      type: 'escrow.created',
+      aggregateType: 'webhook',
+      dedupKey: originalEvent.dedupKey,
+    });
+
+    // First runOnce processes the original event and spawns a webhook
+    outbox.claimDue.mockResolvedValueOnce([originalEvent]);
+    await relay.runOnce();
+    expect(outbox.sendWebhook).toHaveBeenCalledTimes(1);
+
+    // Second runOnce processes the spawned webhook clone
+    outbox.claimDue.mockResolvedValueOnce([webhookClone]);
+    await relay.runOnce();
+
+    // sendWebhook should not be called again for the webhook clone
+    expect(outbox.sendWebhook).toHaveBeenCalledTimes(1);
+    // dispatcher.dispatch should still be called for the webhook clone
+    expect(dispatcher.dispatch).toHaveBeenCalledTimes(2);
   });
 });

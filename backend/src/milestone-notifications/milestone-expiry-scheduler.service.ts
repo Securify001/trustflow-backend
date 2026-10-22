@@ -122,16 +122,15 @@ export class MilestoneExpiryScheduler implements OnModuleInit, OnModuleDestroy {
       for (const gig of openGigs) {
         const reminders = await this.computeReminders(gig, now);
         for (const reminder of reminders) {
-          const wasSent = await this.isDeduplicated(reminder.gigId, reminder.threshold);
-          if (wasSent) {
+          const claimed = await this.claimReminder(reminder.gigId, reminder.threshold);
+          if (!claimed) {
             this.logger.debug(
-              `Reminder ${reminder.threshold} for gig ${reminder.gigId} already sent — skipping`,
+              `Reminder ${reminder.threshold} for gig ${reminder.gigId} already claimed or sent — skipping`,
             );
             continue;
           }
 
           await this.dispatchReminder(reminder);
-          await this.markSent(reminder.gigId, reminder.threshold);
           dispatched.push(reminder);
         }
       }
@@ -188,52 +187,42 @@ export class MilestoneExpiryScheduler implements OnModuleInit, OnModuleDestroy {
   // ─── Deduplication ────────────────────────────────────────────────────────────
 
   /**
-   * Returns true if this (gigId × threshold) reminder has already been sent
-   * within the current threshold window.
+   * Atomically claims the right to send a (gigId × threshold) reminder.
+   * Returns true if this replica won the claim and should dispatch the reminder;
+   * false if another replica already claimed it or it was already sent.
+   *
+   * Uses Redis SET NX EX for atomic cross-replica deduplication, falling back
+   * to in-memory when Redis is unavailable (#799).
    */
-  async isDeduplicated(gigId: string, threshold: ReminderThresholdLabel): Promise<boolean> {
-    const key = this.dedupKey(gigId, threshold);
-
-    if (this.redis) {
-      try {
-        const val = await this.redis.get(key);
-        return val !== null;
-      } catch (err) {
-        this.logger.warn(`Redis dedup read failed for ${key}, falling back to in-memory`, err);
-      }
-    }
-
-    return this.inMemoryDedup.has(key);
-  }
-
-  /**
-   * Mark a (gigId × threshold) reminder as sent.
-   * TTL matches the threshold window so the dedup record expires when the next
-   * occurrence of that window would theoretically apply.
-   */
-  async markSent(gigId: string, threshold: ReminderThresholdLabel): Promise<void> {
+  async claimReminder(gigId: string, threshold: ReminderThresholdLabel): Promise<boolean> {
     const key = this.dedupKey(gigId, threshold);
     const ttlMs = REMINDER_THRESHOLDS_MS.find(t => t.label === threshold)?.ms ?? DEFAULT_SWEEP_INTERVAL_MS;
     const ttlSec = Math.ceil(ttlMs / 1000);
 
     if (this.redis) {
       try {
-        await this.redis.set(key, '1', 'EX', ttlSec);
-        return;
+        const result = await this.redis.set(key, '1', 'EX', ttlSec, 'NX');
+        if (result !== 'OK') {
+          // Another replica already claimed this reminder
+          return false;
+        }
+        return true;
       } catch (err) {
-        this.logger.warn(`Redis dedup write failed for ${key}, falling back to in-memory`, err);
+        this.logger.warn(`Redis dedup claim failed for ${key}, falling back to in-memory`, err);
       }
     }
 
     // In-memory LRU fallback
-    if (!this.inMemoryDedup.has(key)) {
-      this.inMemoryDedup.add(key);
-      this.inMemoryDedupQueue.push(key);
-      if (this.inMemoryDedupQueue.length > IN_MEMORY_DEDUP_MAX) {
-        const oldest = this.inMemoryDedupQueue.shift();
-        if (oldest) this.inMemoryDedup.delete(oldest);
-      }
+    if (this.inMemoryDedup.has(key)) {
+      return false;
     }
+    this.inMemoryDedup.add(key);
+    this.inMemoryDedupQueue.push(key);
+    if (this.inMemoryDedupQueue.length > IN_MEMORY_DEDUP_MAX) {
+      const oldest = this.inMemoryDedupQueue.shift();
+      if (oldest) this.inMemoryDedup.delete(oldest);
+    }
+    return true;
   }
 
   // ─── Notification dispatch ───────────────────────────────────────────────────

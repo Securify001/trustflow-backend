@@ -104,8 +104,6 @@ export class AuthService {
     } catch (error) {
       throw new UnauthorizedException('Invalid token');
     }
-
-    throw new UnauthorizedException('Invalid token');
   }
 
   private extractNonce(challenge: string): string | null {
