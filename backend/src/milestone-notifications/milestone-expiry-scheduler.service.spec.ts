@@ -119,24 +119,43 @@ describe('MilestoneExpiryScheduler', () => {
   // ─── Deduplication ──────────────────────────────────────────────────────────
 
   describe('deduplication (in-memory fallback)', () => {
-    it('is not deduplicated before markSent', async () => {
-      expect(await scheduler.isDeduplicated('gig-1', '24h')).toBe(false);
+    it('first claim succeeds', async () => {
+      expect(await scheduler.claimReminder('gig-1', '24h')).toBe(true);
     });
 
-    it('is deduplicated after markSent', async () => {
-      await scheduler.markSent('gig-1', '24h');
-      expect(await scheduler.isDeduplicated('gig-1', '24h')).toBe(true);
+    it('second claim fails (already claimed)', async () => {
+      await scheduler.claimReminder('gig-1', '24h');
+      expect(await scheduler.claimReminder('gig-1', '24h')).toBe(false);
     });
 
     it('different thresholds are independent', async () => {
-      await scheduler.markSent('gig-1', '24h');
-      expect(await scheduler.isDeduplicated('gig-1', '7d')).toBe(false);
-      expect(await scheduler.isDeduplicated('gig-1', '3d')).toBe(false);
+      await scheduler.claimReminder('gig-1', '24h');
+      expect(await scheduler.claimReminder('gig-1', '7d')).toBe(true);
+      expect(await scheduler.claimReminder('gig-1', '3d')).toBe(true);
     });
 
     it('different gigs are independent', async () => {
-      await scheduler.markSent('gig-1', '24h');
-      expect(await scheduler.isDeduplicated('gig-2', '24h')).toBe(false);
+      await scheduler.claimReminder('gig-1', '24h');
+      expect(await scheduler.claimReminder('gig-2', '24h')).toBe(true);
+    });
+
+    it('atomic claim prevents concurrent replicas from both dispatching the same reminder', async () => {
+      const gig = makeGig({ respondBy: msFromNow(6 * 60 * 60 * 1000) });
+      mockGigService.findByStatus.mockResolvedValue([gig]);
+
+      // Simulate two replicas running runSweep concurrently
+      const [result1, result2] = await Promise.all([
+        scheduler.runSweep(),
+        scheduler.runSweep(),
+      ]);
+
+      const totalDispatched = result1.length + result2.length;
+      const totalEmitCalls = (mockGateway.emitMilestoneUpdate as jest.Mock).mock.calls.length;
+
+      // Each reminder (3 thresholds) should be dispatched exactly once across both replicas
+      // One replica wins all claims, the other gets none for the same (gig, threshold) pairs
+      expect(totalEmitCalls).toBe(totalDispatched);
+      expect(totalEmitCalls).toBeGreaterThan(0); // At least one reminder dispatched
     });
   });
 

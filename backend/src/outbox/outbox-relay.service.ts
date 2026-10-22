@@ -46,7 +46,11 @@ export class OutboxRelayService implements OnModuleInit, OnModuleDestroy {
         // Publish first. If a later destination fails, redelivery is expected;
         // all destinations receive the stable dedupKey to collapse duplicates.
         await this.publisher.publish(event);
-        this.outbox.sendWebhook(null, event.type, event.payload, event.dedupKey);
+        // Skip sendWebhook for events that are already webhook fan-outs to prevent
+        // perpetual re-spawning of webhook events into the same queue (#792).
+        if (event.aggregateType !== 'webhook') {
+          this.outbox.sendWebhook(null, event.type, event.payload, event.dedupKey);
+        }
         await this.dispatcher.dispatch(event);
         await this.outbox.markDelivered(event);
         this.metrics.increment('outbox_delivery_total', { result: 'delivered', type: event.type });
