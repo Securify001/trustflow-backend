@@ -1,12 +1,14 @@
 import { ObjectType, Field, ID, registerEnumType } from '@nestjs/graphql';
 import { MilestoneType } from './milestone.type';
 
+// GraphQL serializes enum members by their keys, so the keys are deliberately the
+// lowercase wire values the REST API (and GraphQL clients) already receive.
 export enum EscrowStatusGraphQLEnum {
-  PENDING = 'pending',
-  ACTIVE = 'active',
-  RELEASED = 'released',
-  DISPUTED = 'disputed',
-  CANCELLED = 'cancelled',
+  pending = 'pending',
+  active = 'active',
+  released = 'released',
+  disputed = 'disputed',
+  cancelled = 'cancelled',
 }
 
 registerEnumType(EscrowStatusGraphQLEnum, {
@@ -28,8 +30,8 @@ export class EscrowType {
   @Field()
   amountXLM!: string;
 
-  @Field()
-  status!: string;
+  @Field(() => EscrowStatusGraphQLEnum)
+  status!: EscrowStatusGraphQLEnum;
 
   @Field()
   createdAt!: string;

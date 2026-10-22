@@ -29,8 +29,24 @@ type Escrow {
   id: ID!
   milestones: [Milestone!]
   splitPercentage: Float
-  status: String!
+  status: EscrowStatus!
   stellarTxHash: String
+}
+
+type EscrowPage {
+  data: [Escrow!]!
+  limit: Int!
+  offset: Int!
+  total: Int!
+}
+
+"""Lifecycle status of an escrow"""
+enum EscrowStatus {
+  active
+  cancelled
+  disputed
+  pending
+  released
 }
 
 type JurorVote {
@@ -56,7 +72,7 @@ type Milestone {
 
 type Query {
   escrow(id: String!): Escrow
-  escrows: [Escrow!]!
+  escrows(limit: Int = 20, offset: Int = 0): EscrowPage!
 }
 
 type UserProfile {

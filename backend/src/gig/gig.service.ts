@@ -19,8 +19,6 @@ import { MetricsService } from '../monitoring/metrics.service';
 import { CreateGigDto, SearchGigsQuery, UpdateGigDto } from './gig.dto';
 import {
   DEFAULT_GIG_SEARCH_CACHE_TTL_SECONDS,
-  DEFAULT_GIG_SEARCH_LIMIT,
-  DEFAULT_GIG_SEARCH_PAGE,
   DEFAULT_RESPONSE_WINDOW_HOURS,
   GIG_EVENTS,
   Gig,
@@ -30,6 +28,7 @@ import {
 import { OutboxService } from '../outbox/outbox.service';
 import { config } from '../config/env.config';
 import { amountGreaterThanOrEqual, amountLessThanOrEqual } from '../common/amount';
+import { normalizePagination, paginate } from '../common/pagination';
 
 const GIG_KEY_PREFIX = 'gig:';
 const GIGS_INDEX_KEY = 'gigs:index';
@@ -213,8 +212,7 @@ export class GigService implements OnModuleInit {
    */
   async search(query: SearchGigsQuery = {}): Promise<PaginatedGigs> {
     const status = query.status ?? GigStatus.OPEN;
-    const page = query.page ?? DEFAULT_GIG_SEARCH_PAGE;
-    const limit = query.limit ?? DEFAULT_GIG_SEARCH_LIMIT;
+    const { page, limit } = normalizePagination(query);
     const cacheKey = this.searchCacheKey(
       status,
       page,
@@ -238,14 +236,7 @@ export class GigService implements OnModuleInit {
       filtered = filtered.filter(g => amountLessThanOrEqual(g.budgetXLM, query.maxBudgetXLM));
     }
 
-    const total = filtered.length;
-    const start = (page - 1) * limit;
-    const result: PaginatedGigs = {
-      items: filtered.slice(start, start + limit),
-      total,
-      page,
-      limit,
-    };
+    const result: PaginatedGigs = paginate(filtered, { page, limit });
 
     await this.writeSearchCache(cacheKey, result);
     return result;
@@ -310,7 +301,7 @@ export class GigService implements OnModuleInit {
   async accept(id: string, responder: string): Promise<Gig> {
     return this.mutateWithRetry(id, async gig => {
       if (gig.status !== GigStatus.OPEN) {
-        throw new ConflictException(`Cannot accept a gig with status "${gig.status}"`);
+        throw new BadRequestException(`Cannot accept a gig with status "${gig.status}"`);
       }
       gig.status = GigStatus.ACCEPTED;
       gig.acceptedBy = responder;
@@ -324,7 +315,7 @@ export class GigService implements OnModuleInit {
   async cancel(id: string): Promise<Gig> {
     return this.mutateWithRetry(id, async gig => {
       if (gig.status !== GigStatus.OPEN) {
-        throw new ConflictException(`Cannot cancel a gig with status "${gig.status}"`);
+        throw new BadRequestException(`Cannot cancel a gig with status "${gig.status}"`);
       }
       gig.status = GigStatus.CANCELLED;
       gig.cancelledAt = new Date().toISOString();
@@ -337,7 +328,7 @@ export class GigService implements OnModuleInit {
   async update(id: string, dto: UpdateGigDto): Promise<Gig> {
     return this.mutateWithRetry(id, async gig => {
       if (gig.status !== GigStatus.OPEN) {
-        throw new ConflictException(`Cannot update a gig with status "${gig.status}"`);
+        throw new BadRequestException(`Cannot update a gig with status "${gig.status}"`);
       }
       if (dto.title !== undefined) gig.title = dto.title;
       if (dto.budgetXLM !== undefined) gig.budgetXLM = dto.budgetXLM;
@@ -355,7 +346,7 @@ export class GigService implements OnModuleInit {
   async remove(id: string): Promise<void> {
     return this.mutateWithRetry(id, async gig => {
       if (gig.status === GigStatus.ACCEPTED) {
-        throw new ConflictException('Cannot delete an accepted gig');
+        throw new BadRequestException('Cannot delete an accepted gig');
       }
       if (this.redis) {
         try {

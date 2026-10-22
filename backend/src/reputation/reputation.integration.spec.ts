@@ -8,6 +8,11 @@ import { DisputeSagaService } from '../dispute/dispute-saga.service';
 import { EscrowDisputeController } from '../dispute/escrow-dispute.controller';
 import { ReputationModule } from './reputation.module';
 import { ReputationController } from './reputation.controller';
+import { validateEnv } from '../config/env.config';
+
+// RedisModule's client factory (and other providers wired in below) read config.*, which
+// requires validateEnv() to have run first — normally done once in main.ts.
+validateEnv();
 
 const JURORS = [
   'GJUROR1111111111111111111111111111111111111111111111111111',

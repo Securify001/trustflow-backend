@@ -2,7 +2,12 @@ import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
-import { EscrowResolver, MilestoneResolver, DeliverableResolver, EscrowPage } from './escrow.resolver';
+import {
+  EscrowResolver,
+  MilestoneResolver,
+  DeliverableResolver,
+  EscrowPage,
+} from './escrow.resolver';
 import { EscrowService } from '../escrow.service';
 import { EscrowType } from './types/escrow.type';
 import { MilestoneType } from './types/milestone.type';
@@ -19,7 +24,7 @@ import { config } from '../../config/env.config';
       autoSchemaFile: join(process.cwd(), 'src/escrow/graphql/schema.gql'),
       sortSchema: true,
       playground: config.NODE_ENV !== 'production',
-      context: ({ req, res }) => ({ req, res }),
+      context: ({ req, res }: { req: unknown; res: unknown }) => ({ req, res }),
     }),
     DataLoaderModule,
   ],

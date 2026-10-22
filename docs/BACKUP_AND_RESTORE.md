@@ -21,8 +21,8 @@ for anything a user would call "my data", so **a Redis backup is the critical on
 
 | Objective | Target | Achieved by | Notes |
 | --- | --- | --- | --- |
-| **RPO — Redis** | **≤ 15 minutes** | `BGSAVE` on a 15-minute schedule | With `appendfsync everysec` (see below), the on-disk AOF is at most ~1s behind, so the binding constraint is the backup interval, not Redis's own fsync |
-| **RPO — Postgres** | **≤ 24 hours** | `pg_dump` nightly | Only the audit log; not on the critical path |
+| **RPO — Redis** | **≤ 24 hours** | `BGSAVE` via `.github/workflows/scheduled-backups.yml` (`cron: '17 3 * * *'`) | Both Redis and Postgres are backed up in the same daily job; a tighter Redis schedule is a known gap (see below) |
+| **RPO — Postgres** | **≤ 24 hours** | `pg_dump` in the same daily workflow | Only the audit log; not on the critical path |
 | **RTO — Redis** | **≤ 30 minutes** | Restore RDB/AOF into a fresh instance, point `REDIS_URL` at it, restart the app | Bounded by copy time, not by load: the RDB is loaded directly |
 | **RTO — Postgres** | **≤ 60 minutes** | `pg_restore`/`psql` replay | A logical backup re-runs the load, so RTO grows with data size |
 
@@ -31,9 +31,11 @@ been performed on real data, no offsite copy, and no drill on a schedule. What e
 the mechanism plus an automated round-trip test. Treat the numbers above as the intended
 contract, and close the gap in the "Known gaps" section before relying on them.
 
-Why Redis is on the tighter schedule: it is the system of record. Why Postgres is not: losing
-`audit_logs` costs the audit trail, not the escrow balances — and the balance is reconcilable
-from the chain by `EscrowReconciliationService`.
+Both Redis and Postgres are backed up by the same daily cron job, so their RPO is currently
+identical. Redis is still the more critical store (it is the system of record for escrow and
+gig state), but the backup cadence does not yet reflect that — a tighter Redis-only schedule
+is listed as a known gap below. Losing `audit_logs` costs only the audit trail; escrow
+balances remain reconcilable from the chain via `EscrowReconciliationService`.
 
 ## Why Redis persistence is not optional
 
@@ -209,3 +211,7 @@ It skips itself when `DATABASE_URL` is unset, so `npm test` still works without 
 5. **Redis is single-instance with no replica.** There is no failover target, so RTO for a
    total Redis loss is bounded by "copy a snapshot and start a new instance" — measured
    regularly, it is likely well over 30 minutes.
+6. **Redis RPO is 24 hours, not tighter than Postgres.** Both stores are backed up by the same
+   daily workflow (`cron: '17 3 * * *'`). Because Redis is the system of record, a more
+   frequent Redis-only backup job (e.g. every 15 minutes) would meaningfully reduce data-loss
+   exposure. Until that job exists, Redis and Postgres have the same ≤ 24-hour RPO.

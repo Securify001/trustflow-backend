@@ -184,6 +184,11 @@ for arg in "$@"; do
     -t|-dc) exec ${REAL_GZIP} "$@" ;;
   esac
 done
+# Drain stdin so the pg_dump stub on the other end of the pipe can finish writing
+# without receiving SIGPIPE. Without this the race between the two processes would
+# cause pg_dump to exit 141 (128+SIGPIPE) before the script ever reaches the gzip -t
+# integrity check that this test is actually exercising.
+cat >/dev/null
 echo "THIS IS NOT A VALID GZIP STREAM"
 exit 0
 `,

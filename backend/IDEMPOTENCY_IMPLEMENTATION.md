@@ -23,7 +23,7 @@ The distributed idempotency key management system requested in issue #661 has be
 
 3. **@Idempotent() Decorator** (`backend/src/common/idempotency/idempotency-key.decorator.ts`)
    - Marks endpoints as idempotent
-   - Already applied to deliverable upload endpoint
+   - Already applied to gig creation, escrow creation, and deliverable upload endpoints
 
 ### How It Works
 
@@ -73,9 +73,11 @@ Comprehensive test coverage exists in:
 
 ## Related Endpoints
 
-Currently applied to:
+Currently applied to (grep `@Idempotent()` in `backend/src` for the authoritative list):
 
-- `POST /deliverables` (via `@Idempotent()` decorator)
+- `POST /gigs` — gig creation (`backend/src/gig/gig.controller.ts`)
+- `POST /escrows` — escrow creation (`backend/src/escrow/escrow.controller.ts`)
+- `POST /deliverables` — deliverable upload (`backend/src/deliverable/deliverable.controller.ts`)
 
 Can be added to any mutating endpoint by adding the `@Idempotent()` decorator.
 

@@ -1,9 +1,10 @@
-import { ExecutionContext } from '@nestjs/common';
+import { BadRequestException, ExecutionContext, ValidationPipe } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test, TestingModule } from '@nestjs/testing';
 import { MigrationController } from './migration.controller';
 import { MigrationRunnerService } from './migration-runner.service';
 import { MigrationRegistryService } from './migration-registry.service';
+import { RunMigrationDto } from './migration.dto';
 import { JwtAuthGuard } from '../auth/auth.guard';
 import { AdminGuard } from '../admin/admin.guard';
 import { validateEnv } from '../config/env.config';
@@ -107,6 +108,40 @@ describe('MigrationController', () => {
     await controller.run('gigs-add-priority-column', dto);
 
     expect(mockRunner.run).toHaveBeenCalledWith('gigs-add-priority-column', dto);
+  });
+
+  it('forwards dryRun through to the runner', async () => {
+    const dto = { dryRun: true };
+    mockRunner.run.mockResolvedValue({ runId: 'mig-1' });
+
+    await controller.run('gigs-add-priority-column', dto);
+
+    expect(mockRunner.run).toHaveBeenCalledWith('gigs-add-priority-column', {
+      dryRun: true,
+    });
+  });
+
+  describe('RunMigrationDto validation', () => {
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    });
+
+    function transform(body: Record<string, unknown>) {
+      return pipe.transform(body, { type: 'body', metatype: RunMigrationDto });
+    }
+
+    it('accepts dryRun as a boolean', async () => {
+      const dto = (await transform({ dryRun: true })) as RunMigrationDto;
+
+      expect(dto).toBeInstanceOf(RunMigrationDto);
+      expect(dto.dryRun).toBe(true);
+    });
+
+    it('rejects a non-boolean dryRun', async () => {
+      await expect(transform({ dryRun: 'yes' })).rejects.toBeInstanceOf(BadRequestException);
+    });
   });
 
   it('rollback delegates to the runner with the run id', async () => {

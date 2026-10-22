@@ -84,7 +84,7 @@ describe('configureApp (E2E)', () => {
       expect(res.body).toMatchObject({
         statusCode: 404,
         message: 'thing not found',
-        path: '/app-setup-test/http-exception',
+        path: '/v1/app-setup-test/http-exception',
       });
       expect(typeof res.body.timestamp).toBe('string');
     });
@@ -97,7 +97,7 @@ describe('configureApp (E2E)', () => {
       expect(res.body).toMatchObject({
         statusCode: 500,
         message: 'Internal server error',
-        path: '/app-setup-test/unexpected-error',
+        path: '/v1/app-setup-test/unexpected-error',
       });
       expect(JSON.stringify(res.body)).not.toContain('internal details');
     });

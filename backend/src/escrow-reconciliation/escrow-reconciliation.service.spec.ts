@@ -5,6 +5,11 @@ import { EscrowChainStateClient } from './escrow-chain-state.client';
 import { EscrowReconciliationStateStore } from './escrow-reconciliation-state.store';
 import { InvalidChainStateError } from './chain-escrow.validation';
 import { ChainEscrowRecord, DriftType, RECONCILIATION_EVENTS } from './escrow-reconciliation.types';
+import { resetEnvConfig, setTestEnv, validateEnv } from '../config/env.config';
+
+// reconcile() reads config.ESCROW_RECONCILIATION_SWEEP_CONCURRENCY, which requires
+// validateEnv() to have run first — normally done once in main.ts.
+validateEnv();
 
 function makeEscrow(overrides: Partial<Escrow> = {}): Escrow {
   return {
@@ -68,6 +73,9 @@ describe('EscrowReconciliationService', () => {
     } else {
       process.env.ESCROW_RECONCILIATION_SWEEP_CONCURRENCY = originalConcurrency;
     }
+    // Re-validate so a per-test override (via setTestEnv) doesn't leak into the next test.
+    resetEnvConfig();
+    validateEnv();
   });
 
   describe('no drift', () => {
@@ -261,7 +269,7 @@ describe('EscrowReconciliationService', () => {
     });
 
     it('bounds chain reads using the configured concurrency', async () => {
-      process.env.ESCROW_RECONCILIATION_SWEEP_CONCURRENCY = '2';
+      setTestEnv({ ESCROW_RECONCILIATION_SWEEP_CONCURRENCY: '2' });
       const escrows = Array.from({ length: 6 }, (_, index) =>
         makeEscrow({ id: `esc-${index}`, contractEscrowId: `chain-esc-${index}` }),
       );

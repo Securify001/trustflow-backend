@@ -1,12 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
-import { EscrowGraphQLModule } from './escrow-graphql.module';
+import { validateEnv } from '../../config/env.config';
 import { EscrowService } from '../escrow.service';
 import { MilestoneLoader } from './dataloader/milestone.loader';
 import { DeliverableLoader } from './dataloader/deliverable.loader';
 import { JurorVoteLoader } from './dataloader/juror-vote.loader';
 import { UserProfileLoader } from './dataloader/user-profile.loader';
+
+// The GraphQL module reads `config` while its decorator is evaluated, so config must be
+// validated before the module is required (see env-config-import-order.spec.ts).
+validateEnv();
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { EscrowGraphQLModule } = require('./escrow-graphql.module') as typeof import('./escrow-graphql.module');
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 

@@ -3,6 +3,12 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { DisputeSagaController } from './dispute-saga.controller';
 import { DisputeSagaService } from './dispute-saga.service';
 import { JwtAuthGuard } from '../auth/auth.guard';
+import { validateEnv } from '../config/env.config';
+
+// DisputeSagaController is guarded by AdminGuard, which reads config.ADMIN_ADDRESSES in its
+// constructor — Nest instantiates guards during compile(), so validateEnv() must have
+// already run — normally done once in main.ts.
+validateEnv();
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 

@@ -441,6 +441,15 @@ describe('GigService', () => {
       });
     });
 
+    describe('remove', () => {
+      it('throws when the gig has been accepted', async () => {
+        const gig = await service.create(validDto);
+        await service.accept(gig.id, 'GYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY');
+
+        await expect(service.remove(gig.id)).rejects.toThrow(BadRequestException);
+      });
+    });
+
     describe('expire', () => {
       it('marks an open gig as expired', async () => {
         const gig = await service.create(validDto);

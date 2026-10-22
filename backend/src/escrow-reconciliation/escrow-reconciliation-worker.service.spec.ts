@@ -1,6 +1,11 @@
 import { EscrowReconciliationWorkerService } from './escrow-reconciliation-worker.service';
 import { EscrowReconciliationService } from './escrow-reconciliation.service';
 import { DistributedLockService } from '../common/redis/distributed-lock.service';
+import { resetEnvConfig, setTestEnv, validateEnv } from '../config/env.config';
+
+// runOnce()/onModuleInit() read config.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS, which requires
+// validateEnv() to have run first — normally done once in main.ts.
+validateEnv();
 
 async function flushPromises(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -35,6 +40,9 @@ describe('EscrowReconciliationWorkerService', () => {
     jest.useRealTimers();
     if (originalInterval === undefined) delete process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS;
     else process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS = originalInterval;
+    // Re-validate so a per-test override (via setTestEnv) doesn't leak into the next test.
+    resetEnvConfig();
+    validateEnv();
   });
 
   describe('runOnce', () => {
@@ -86,6 +94,8 @@ describe('EscrowReconciliationWorkerService', () => {
     it('schedules periodic sweeps at the default interval', () => {
       jest.useFakeTimers();
       delete process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS;
+      resetEnvConfig();
+      validateEnv();
 
       worker.onModuleInit();
       expect(reconciliationService.reconcile).not.toHaveBeenCalled();
@@ -98,7 +108,7 @@ describe('EscrowReconciliationWorkerService', () => {
 
     it('honors a custom ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS', () => {
       jest.useFakeTimers();
-      process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS = '1000';
+      setTestEnv({ ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS: '1000' });
 
       worker.onModuleInit();
       jest.advanceTimersByTime(999);
@@ -112,7 +122,7 @@ describe('EscrowReconciliationWorkerService', () => {
 
     it('does not schedule a sweep when the interval is disabled', () => {
       jest.useFakeTimers();
-      process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS = '0';
+      setTestEnv({ ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS: '0' });
 
       worker.onModuleInit();
       jest.advanceTimersByTime(60 * 60 * 1000);
@@ -122,7 +132,7 @@ describe('EscrowReconciliationWorkerService', () => {
 
     it('stops sweeping once destroyed', () => {
       jest.useFakeTimers();
-      process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS = '1000';
+      setTestEnv({ ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS: '1000' });
 
       worker.onModuleInit();
       worker.onModuleDestroy();
@@ -135,7 +145,7 @@ describe('EscrowReconciliationWorkerService', () => {
   describe('sweep failures', () => {
     it('logs and swallows an error instead of crashing the interval', () => {
       jest.useFakeTimers();
-      process.env.ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS = '1000';
+      setTestEnv({ ESCROW_RECONCILIATION_SWEEP_INTERVAL_MS: '1000' });
       reconciliationService.reconcile.mockRejectedValue(new Error('boom'));
 
       worker.onModuleInit();

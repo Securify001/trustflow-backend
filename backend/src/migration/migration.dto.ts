@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, Min, Max } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   BackfillProgress,
@@ -35,6 +35,17 @@ export class RunMigrationDto {
   @Min(0)
   @Max(60000)
   batchDelayMs?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Preview the migration without applying any changes: counts pending rows and reports ' +
+      'what would run, but never executes expand/backfill/contract',
+    example: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }
 
 export class BackfillProgressDto implements BackfillProgress {

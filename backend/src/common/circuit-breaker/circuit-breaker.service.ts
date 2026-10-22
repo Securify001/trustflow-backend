@@ -32,20 +32,23 @@ export class CircuitBreakerService {
       resetTimeout: options.resetTimeout ?? 30000,
       rollingCountTimeout: options.rollingCountTimeout ?? 10000,
       rollingCountBuckets: options.rollingCountBuckets ?? 10,
-      fallback: options.fallback,
       name,
     });
+
+    if (options.fallback) {
+      breaker.fallback(options.fallback);
+    }
 
     breaker.on('open', () => {
       this.logger.warn(`Circuit breaker "${name}" is now OPEN. Failing fast.`);
     });
 
     breaker.on('halfOpen', () => {
-      this.logger.info(`Circuit breaker "${name}" is now HALF_OPEN. Attempting recovery.`);
+      this.logger.log(`Circuit breaker "${name}" is now HALF_OPEN. Attempting recovery.`);
     });
 
     breaker.on('close', () => {
-      this.logger.info(`Circuit breaker "${name}" is now CLOSED. Service recovered.`);
+      this.logger.log(`Circuit breaker "${name}" is now CLOSED. Service recovered.`);
     });
 
     this.breakers.set(name, breaker);
@@ -61,10 +64,10 @@ export class CircuitBreakerService {
       options,
     );
 
-    return breaker.fire();
+    return breaker.fire() as Promise<T>;
   }
 
-  getStatus(name: string): { state: string; stats: Record<string, unknown> } | null {
+  getStatus(name: string): { state: string; stats: Breaker.Stats } | null {
     const breaker = this.breakers.get(name);
     if (!breaker) return null;
 
@@ -74,8 +77,8 @@ export class CircuitBreakerService {
     };
   }
 
-  getAllStatus(): Record<string, { state: string; stats: Record<string, unknown> }> {
-    const result: Record<string, { state: string; stats: Record<string, unknown> }> = {};
+  getAllStatus(): Record<string, { state: string; stats: Breaker.Stats }> {
+    const result: Record<string, { state: string; stats: Breaker.Stats }> = {};
 
     for (const [name, breaker] of this.breakers.entries()) {
       result[name] = {

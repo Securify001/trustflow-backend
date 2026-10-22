@@ -2,6 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { EscrowReconciliationController } from './escrow-reconciliation.controller';
 import { EscrowReconciliationService } from './escrow-reconciliation.service';
+import { validateEnv } from '../config/env.config';
+
+// EscrowReconciliationController is guarded by AdminGuard, which reads config.ADMIN_ADDRESSES in
+// its constructor — Nest instantiates guards during compile(), so validateEnv() must have
+// already run — normally done once in main.ts.
+validateEnv();
 
 describe('EscrowReconciliationController', () => {
   let controller: EscrowReconciliationController;
